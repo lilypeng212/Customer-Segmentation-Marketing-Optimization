@@ -1,0 +1,229 @@
+---
+title: "G2_final_1"
+output: html_document
+date: "2024-05-13"
+---
+
+<br>
+
+### Data Preparation Process 資料整理
+
+<hr>
+
+### Preparing The Predictors (X)  製作預測變數
+```{r echo=T, message=F, cache=F, warning=F}
+##rm(list=ls(all=TRUE))
+pacman::p_load(magrittr, caTools, ggplot2, dplyr)
+load("data/tf0.rdata")
+```
+
+##### 移除最後一期資料 
+移除最後一期(分割日期之後)的資料
+```{r}
+feb01 = as.Date("2001-02-01")   # 資料分割日期 
+Z = subset(Z0, date < feb01)    # 618212 項目
+```
+
+##### Aggregate for the Transaction Records
+重新匯整交易紀錄
+```{r}
+X = group_by(Z, tid) %>% summarise(
+  date = first(date),  # date of transaction
+  cust = first(cust),  # customer id
+  age = first(age),    # age group
+  area = first(area),  # area group
+  items = n(),                # number of items
+  pieces = sum(qty),          # number of pieces
+  total = sum(price),         # total amount
+  gross = sum(price - cost)   # raw profit
+  ) %>% data.frame  # 88387 交易筆數
+```
+
+```{r}
+summary(X)
+```
+
+##### Check Quantile and Remove Outlier 
+移除不合理的離群資料
+```{r}
+sapply(X[,6:9], quantile, prob=c(.999, .9995, .9999))
+```
+
+```{r}
+X = subset(X, items<=64 & pieces<=98 & total<=11260) # 88387 -> 88295
+```
+
+##### Aggregate for Customer Records
+重新匯整顧客資料
+```{r}
+d0 = max(X$date) + 1
+A = X %>% mutate(
+  days = as.integer(difftime(d0, date, units="days"))
+  ) %>% 
+  group_by(cust) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frequency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 28584 顧客
+nrow(A)
+```
+<br><br><hr>
+
+### Preparing the Target Variables (Y) 製作預測變數
+
+##### Aggregate Feb's Transaction by Customer
+匯整最後一期的資料
+```{r}
+feb = filter(X0, date>= feb01) %>% group_by(cust) %>% 
+  summarise(amount = sum(total))  # 16900
+```
+`feb$amount`之中有最後一期來買過的`16,900`位顧客的營收貢獻
+
+##### The Target for Regression - `A$amount`
+將`feb$amount`匯入`A`
+```{r}
+A = merge(A, feb, by="cust", all.x=T)
+```
+
+##### The Target for Classification - `A$buy`
+`A$amount`是`NA`代表這位顧客最後一期沒來買 <br>
+`A$amount`不是`NA`代表這位顧客最後一期有來買過
+```{r}
+A$buy = !is.na(A$amount)  
+table(A$buy, !is.na(A$amount))
+```
+
+##### Summary of the Dataset
+```{r}
+summary(A)
+```
+
+讓`X`與`Z`之中的資料範圍與`A`一樣
+```{r}
+X = subset(X, cust %in% A$cust & date < as.Date("2001-02-01"))
+Z = subset(Z, cust %in% A$cust & date < as.Date("2001-02-01"))
+```
+
+<br><br><hr>
+
+### 分割訓練測試(TR)與測試資料(TS)
+
++ `A`之中每一筆資料都可以拿來做購買機率模型
++ 但只有`A$amount`有值的資料可以拿來做購買金額模型 : `A2`
++ `A`和`A2`都需要在相同的目標變數分佈切割成訓練測試(TR)與測試資料(TS)
++ 我們分別用`caTools::sample.split()`和隨機抽樣(`sample`)來製作分割向量:`spl`，`spl2`
+
+
+##### Data for 購買機率模型
+依指定的目標變數(`A$buy`)的分佈切割成訓練測試(TR)與測試資料(TS)製作分割向量:`spl`
+
+##age=a34
+```{r}
+set.seed(2018)
+A_a34=A %>% filter(age=="a34")
+spl_a34 = sample.split(A_a34$buy, SplitRatio=0.7)
+TR_a34 = A_a34[spl_a34,]; TS_a34 = A_a34[!spl_a34,]
+```
+
+```{r}
+mean(spl_a34)
+```
+
+```{r}
+tapply(A_a34$buy,spl_a34,mean)
+```
+`TR`和`TS`之中`buy==TRUE`的比例是一致的
+
+```{r fig.height=3, fig.width=7}
+cbind(A_a34, spl_a34) %>% filter(buy) %>%
+  ggplot(aes(x=log(amount))) + geom_density(aes(fill=spl_a34), alpha=0.5)
+```
+`TR`和`TS`之中`amount`的分佈也是是一致的
+
+
+##age=a44
+```{r}
+set.seed(2018)
+A_a44=A %>% filter(age=="a44")
+spl_a44 = sample.split(A_a44$buy, SplitRatio=0.7)
+TR_a44 = A_a44[spl_a44,]; TS_a44 = A_a44[!spl_a44,]
+```
+
+```{r}
+mean(spl_a44)
+```
+
+```{r}
+tapply(A_a44$buy,spl_a44,mean)
+```
+`TR`和`TS`之中`buy==TRUE`的比例是一致的
+
+```{r fig.height=3, fig.width=7}
+cbind(A_a44, spl_a44) %>% filter(buy) %>%
+  ggplot(aes(x=log(amount))) + geom_density(aes(fill=spl_a44), alpha=0.5)
+```
+`TR`和`TS`之中`amount`的分佈也是是一致的
+
+##### Data for 購買金額模型
+
++ 只有`A$amount`有值的資料可以拿來做購買金額模型 : `A2`
++ 金額欄位需要做對數轉換才會符合常態分佈(線性回歸的假設)
+
+##age=a34
+```{r}
+A2 = subset(A, buy) %>% mutate_at(c("m","rev","amount"), log10)
+A2_a34=A2 %>% filter(age=="a34")
+n_a34 = nrow(A2_a34)
+```
+
+以隨機抽樣(`sample`)來製作分割向量:`spl2`
+```{r}
+set.seed(2018); spl2_a34 = 1:n_a34 %in% sample(1:n_a34, round(0.7*n_a34))
+mean(spl_a34)
+```
+
+```{r fig.height=3, fig.width=7}
+cbind(A2_a34, spl2_a34) %>% 
+  ggplot(aes(x=amount)) + geom_density(aes(fill=spl2_a34), alpha=0.5)
+```
+
+
+##age=a44
+```{r}
+A2_a44=A2 %>% filter(age=="a44")
+n_a44 = nrow(A2_a44)
+```
+
+以隨機抽樣(`sample`)來製作分割向量:`spl2`
+```{r}
+set.seed(2018); spl2_a44 = 1:n_a44 %in% sample(1:n_a44, round(0.7*n_a44))
+mean(spl_a44)
+```
+
+```{r fig.height=3, fig.width=7}
+cbind(A2_a44, spl2_a44) %>% 
+  ggplot(aes(x=amount)) + geom_density(aes(fill=spl2_a44), alpha=0.5)
+```
+
+
+##### 儲存做好的資料
+```{r}
+save(Z, X, A, A_a34, A_a44, spl_a34, spl_a44, spl2_a34, spl2_a44, file="data/tf3_final.rdata")
+```
+<br>
+
+
++ `Z`、`X`:最後一期之前的交易項目紀錄、交易紀錄
++ `A`:最後一期之前購買過的顧客
+  + `TR=A[spl,]`:購買機率模型的訓練測試
+  + `TS=A[!spl]`:購買機率模型的測試資料
++ `A2`:`A`之中在最後一期有購買過的顧客
+  + `TR2=A2[spl,]`:購買金額模型的訓練測試
+  + `TS2=A2[!spl]`:購買金額模型的測試資料
+
+<br><hr>
