@@ -33,6 +33,16 @@ Developed a customer analytics framework combining segmentation, predictive mode
 
 ---
 
+## 📂 Data Resource
+
+- Ta-Feng grocery transaction dataset (Taiwan retail dataset)  
+- Public dataset accessed via Kaggle:  
+  https://www.kaggle.com/datasets/chiranjivdas09/ta-feng-grocery-dataset  
+- Originally collected from a Taiwanese retail company and commonly used in academic research for customer behavior analysis, segmentation, and recommendation modeling.
+- Data has been preprocessed and adapted for analytical demonstration and modeling purposes.
+
+---
+
 ## 🛠 Tools
 - R (modeling, simulation, data analysis)  
 - Statistical modeling (regression-based prediction)  
@@ -42,5 +52,6 @@ Developed a customer analytics framework combining segmentation, predictive mode
 ---
 
 ## ⚠️ Disclaimer
-This repository uses academic datasets and simplified assumptions for demonstration purposes only.  
-No real business data or proprietary information is included.
+This project uses publicly available datasets sourced from platforms such as Kaggle for academic and demonstration purposes only.  
+The data may not fully reflect real-world business conditions, and all analyses are based on simplified assumptions.  
+No proprietary or confidential business data is included.
