@@ -33,6 +33,19 @@ Developed a customer analytics framework combining segmentation, predictive mode
 
 ---
 
+## 📊 Sample Analysis Output
+
+### Customer Segmentation
+（放一張圖）
+
+### Predictive Modeling
+（放一張結果）
+
+### Marketing ROI Optimization
+（放 ROI 那張）
+
+---
+
 ## 📂 Data Resource
 
 - Ta-Feng grocery transaction dataset (Taiwan retail dataset)  
