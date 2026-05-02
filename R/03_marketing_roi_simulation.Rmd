@@ -1,0 +1,256 @@
+---
+title: "G2_final_2"
+output: html_document
+date: "2024-05-19"
+---
+</center>
+
+<hr>
+
+##### 載入之前做好(TF5_Split.Rmd)的資料
+```{r echo=T, message=F, cache=F, warning=F}
+pacman::p_load(dplyr,ggplot2,caTools)
+##rm(list=ls(all=TRUE))
+load("data/tf3_final.rdata")
+```
+
+##### 使用`spl`切割機率模型的訓練(`TR`)與測試資料(`TS`)
++ `Z`、`X`:最後一期之前的交易項目紀錄、交易紀錄
++ `A`:最後一期之前購買過的顧客
+  + `TR=A[spl,]`:購買機率模型的訓練測試
+  + `TS=A[!spl]`:購買機率模型的測試資料
++ `A2`:`A`之中在最後一期有購買過的顧客
+  + `TR2=A2[spl,]`:購買金額模型的訓練測試
+  + `TS2=A2[!spl]`:購買金額模型的測試資料
+```{r}
+TR_a34 = subset(A_a34, spl_a34)
+TS_a34 = subset(A_a34, !spl_a34)
+```
+<br><hr>
+
+### a34的購買機率模型
+```{r}
+# 我們不使用A[,1](顧客ID)和A[,10](購買金額)
+glm_a34 = glm(buy ~ ., TR_a34[,-c(1,8,10)], family=binomial()) 
+summary(glm_a34)
+```
+
+測試資料的機率預測
+```{r}
+pred_a34 =  predict(glm_a34, TS_a34, type="response")
+```
+
+混淆矩陣
+```{r}
+cm_a34 = table(actual = TS_a34$buy, predict = pred_a34> 0.5); cm_a34
+```
+
+```{r}
+acc.ts_a34 = cm_a34 %>% {sum(diag(.))/sum(.)}
+c(1-mean(TS_a34$buy) , acc.ts_a34)  # 0.69998
+```
+模型可以將預測的準確率提升從54%提高到70%
+
+
+```{r}
+colAUC(pred_a34, TS_a34$buy)        # 0.7556
+```
+<br><hr>
+
+### a34的購買金額模型
+```{r}
+A2_a34 = subset(A_a34, A_a34$buy) %>% mutate_at(c("m","rev","amount"), log10)
+TR2_a34 = subset(A2_a34, spl2_a34)
+TS2_a34 = subset(A2_a34, !spl2_a34)
+```
+
+```{r}
+lm_a34 = lm(amount ~ ., TR2_a34[,-c(1,8,11)])
+summary(lm_a34)
+```
+
+##### 計算模型可以降低的誤差比率(相對於目標變數的平均值)
+```{r}
+r2.tr_a34 = summary(lm_a34)$r.sq
+SST_a34 = sum((TS2_a34$amount - mean(TR2_a34$amount))^ 2)
+SSE_a34 = sum((predict(lm_a34, TS2_a34) -  TS2_a34$amount)^2)
+r2.ts_a34 = 1 - (SSE_a34/SST_a34)
+c(R2train_a34=r2.tr_a34, R2test_a34=r2.ts_a34)
+```
+##### 匯整 2000-12-01 ~ 2001~02-28 這三個月的資料來做預測變數 
+```{r}
+load("data/tf0.rdata")
+d0 = max(X0$date) + 1
+B = X0 %>%
+  filter(date >= as.Date("2000-12-01")) %>% 
+  mutate(days = as.integer(difftime(d0, date, units="days"))) %>% 
+  group_by(cust) %>% summarise(
+    r = min(days),      # recency
+    s = max(days),      # seniority
+    f = n(),            # frquency
+    m = mean(total),    # monetary
+    rev = sum(total),   # total revenue contribution
+    raw = sum(gross),   # total gross profit contribution
+    age = age[1],       # age group
+    area = area[1],     # area code
+  ) %>% data.frame      # 28584
+nrow(B)
+```
+
+`B`:每一位在 2000-12-01 ~ 2001~02-28這三個月來買過的顧客
+
+##### 預測未來一期的購買機率
+```{r}
+B_a34=B %>% filter(age=="a34")
+B_a34$Buy = predict(glm_a34, B_a34, type="response")
+print(mean(B_a34$Buy))
+```
+`B$Buy`: 下一期(March.2001)的購買機率  
+
+
+##### 預測未來一期的購買金額
+
+<span style="font-size:24px">`r "\U1F4A1"`：</span>
+估計金額時記得要把金額變數做對數轉換，預測值要做指數還原
+
+```{r}
+B2_a34 = B_a34 %>% mutate_at(c("m","rev"), log10)
+B_a34$Rev = 10^predict(lm_a34, B2_a34)
+```
+
+##### 預測購買機率和預測購買金額的分佈
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.8)
+hist(B_a34$Buy)
+hist(log(B_a34$Rev,10))
+```
+####計算a34的預期獲利
+```{r}
+total_RevF_a34 = sum(B_a34$Rev) 
+print(total_RevF_a34)
+```
+### a34的顧客終生價值(CLV - Customer Live Time Value)
+```{r}
+g_a34 = 0.3   # 平均毛利率
+N_a34 = 36    # 估計CLV期間(三年)
+d_a34 = 0.01  # 資本利率
+B_a34$CLV = g_a34 * B_a34$Rev * rowSums(sapply(
+  0:N_a34, function(i) (B_a34$Buy/(1+d_a34))^i ) )
+
+summary(B_a34$CLV)
+```
+
+```{r fig.height=4}
+ggplot(B_a34, aes(CLV)) + 
+  geom_histogram(bins=30, fill="skyblue", alpha=0.6) + 
+  geom_vline(xintercept = mean(B_a34$CLV), color = "black", linetype = "dashed", size = 1) +scale_x_log10()
+```
+
+
+<br><hr>
+
+### a44的購買機率模型
+```{r}
+TR_a44 = subset(A_a44, spl_a44)
+TS_a44 = subset(A_a44, !spl_a44)
+glm_a44 = glm(buy ~ ., TR_a44[,-c(1,8,10)], family=binomial()) 
+summary(glm_a44)
+```
+
+測試資料的機率預測
+```{r}
+pred_a44 =  predict(glm_a44, TS_a44, type="response")
+```
+
+混淆矩陣
+```{r}
+cm_a44 = table(actual = TS_a44$buy, predict = pred_a44> 0.5); cm_a44
+```
+
+```{r}
+acc.ts_a44 = cm_a44 %>% {sum(diag(.))/sum(.)}
+c(1-mean(TS_a44$buy) , acc.ts_a44)  # 0.69998
+```
+模型可以將預測的準確率提升從53%提高到69%
+
+
+```{r}
+colAUC(pred_a44, TS_a44$buy)        # 0.7556
+```
+<br><hr>
+
+### a44的購買金額模型
+```{r}
+A2_a44 = subset(A_a44, A_a44$buy) %>% mutate_at(c("m","rev","amount"), log10)
+TR2_a44 = subset(A2_a44, spl2_a44)
+TS2_a44 = subset(A2_a44, !spl2_a44)
+```
+
+```{r}
+lm_a44 = lm(amount ~ ., TR2_a44[,-c(1,8,11)])
+summary(lm_a44)
+```
+
+##### 計算模型可以降低的誤差比率(相對於目標變數的平均值)
+```{r}
+r2.tr_a44 = summary(lm_a44)$r.sq
+SST_a44 = sum((TS2_a44$amount - mean(TR2_a44$amount))^ 2)
+SSE_a44 = sum((predict(lm_a44, TS2_a44) -  TS2_a44$amount)^2)
+r2.ts_a44 = 1 - (SSE_a44/SST_a44)
+c(R2train_a44=r2.tr_a44, R2test_a44=r2.ts_a44)
+```
+
+`B`:每一位在 2000-12-01 ~ 2001~02-28這三個月來買過的顧客
+
+##### 預測未來一期的購買機率
+```{r}
+B_a44=B %>% filter(age=="a44")
+B_a44$Buy = predict(glm_a44, B_a44, type="response")
+```
+`B$Buy`: 下一期(March.2001)的購買機率  
+
+
+##### 預測未來一期的購買金額
+
+<span style="font-size:24px">`r "\U1F4A1"`：</span>
+估計金額時記得要把金額變數做對數轉換，預測值要做指數還原
+
+```{r}
+B2_a44 = B_a44 %>% mutate_at(c("m","rev"), log10)
+B_a44$Rev = 10^predict(lm_a44, B2_a44)
+```
+
+##### 預測購買機率和預測購買金額的分佈
+```{r fig.height=2.4, fig.width=7.2}
+par(mfrow=c(1,2), cex=0.8)
+hist(B_a44$Buy)
+hist(log(B_a44$Rev,10))
+```
+##計算a44的預期獲利
+```{r}
+total_RevF_a44 = sum(B_a44$Rev) 
+print(total_RevF_a44)
+```
+
+### a44的顧客終生價值(CLV - Customer Live Time Value)
+```{r}
+g_a44 = 0.3   # 平均毛利率
+N_a44 = 36    # 估計CLV期間(三年)
+d_a44 = 0.01  # 資本利率
+B_a44$CLV = g_a44 * B_a44$Rev * rowSums(sapply(
+  0:N_a44, function(i) (B_a44$Buy/(1+d_a44))^i ) )
+
+summary(B_a44$CLV)
+```
+
+```{r fig.height=4}
+ggplot(B_a44, aes(CLV)) + 
+  geom_histogram(bins=30, fill="skyblue", alpha=0.6) + 
+  geom_vline(xintercept = mean(B_a44$CLV), color = "black", linetype = "dashed", size = 1) +scale_x_log10()
+```
+
+
+將預測值儲存起來
+```{r}
+save(B_a34, B_a44, file='data/tf4_final.rdata')
+```
