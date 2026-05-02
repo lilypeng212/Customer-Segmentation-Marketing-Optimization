@@ -1,0 +1,194 @@
+```{r echo=T, message=F, cache=F, warning=F}
+rm(list=ls(all=TRUE))
+pacman::p_load(vcd, magrittr, readr, caTools, ggplot2, dplyr, plotly)
+load("data/tf0.rdata")
+sapply(list(cust=A0,tid=X0,items=Z0), nrow)
+```
+<br>
+
+###每月交易量
+```{r}
+Z0 %>% 
+  mutate(Y_M=format(date,"%Y/%m")) %>% 
+  group_by(Y_M) %>%
+  summarise(total_quantity = sum(qty)) %>%
+  ggplot(aes(x = Y_M, y = total_quantity)) +
+  geom_bar(stat = "identity", fill = "skyblue", alpha = 0.7) +
+  theme_minimal() +
+  ggtitle("No. Transaction per Month") +
+  xlab("Month") +
+  ylab("Total Quantity")
+```
+
+###週間交易量
+```{r fig.height=2, fig.width=6}
+X0$wday = format(X0$date, "%u")
+par(cex=0.7, mar=c(2,3,2,1))
+table(X0$wday) %>% barplot(main="No. Transactions in Week Days")
+```
+
+### 年齡與地理區隔
+```{r fig.height=2, fig.width=7}
+par(mfrow=c(1,2),cex=0.7)
+table(A0$age) %>% barplot(las=2,main="Age Groups")
+table(A0$area) %>% barplot(las=2,main="Areas")
+```
+
+![Fig-2: Zip Codes](fig/zipcode.png)
+```{r}
+A0 %>% filter(age!="a99") %>%    # 濾掉沒有年齡資料的顧客('a99')
+  group_by(age) %>% summarise(
+    Group.Size = n(),              # 族群人數
+    avg.Freq = mean(f),            # 平均購買次數
+    avProfit = mean(raw)           # 人均利潤
+  ) %>% 
+  ggplot(aes(y=avg.Freq, x=avProfit)) +
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=age)) +
+  geom_hline(yintercept = mean(A0$f), linetype = "dashed", color = "red") +  # 添加y軸的平均線
+  geom_vline(xintercept = mean(A0$raw), linetype = "dashed", color = "blue") +  # 添加x軸的平均線
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均購買次數") + xlab("人均利潤")
+
+# 根據此圖，a44的族群為人均利潤最高的族群，故將針對a44族群購買的產品及其購買習慣進行行銷策略規劃。
+# 根據此圖，a34的族群為人均利潤高於平均，但平均購買次數低於平均的族群，故將針對a34族群購買的產品及其購買習慣進行行銷策略規劃。
+```
+
+```{r}
+A0 %>% filter(age!="a99") %>%     # 濾掉沒有年齡資料的顧客('a99')
+  group_by(age) %>% summarise(
+    Group.Size = n(),              # 族群人數
+    avg.Rece = mean(r),            # 平均最近來店次數
+    avProfit = mean(raw)           # 人均利潤
+  ) %>% 
+ # filter(avg.Rece > 30) %>%  # 筛选出 avg.Rece 大于 30 的数据
+  ggplot(aes(y=avg.Rece, x=avProfit)) +
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=age)) +
+  geom_hline(yintercept = mean(A0$r), linetype = "dashed", color = "red") +  # 添加y軸的平均線
+  geom_vline(xintercept = mean(A0$raw), linetype = "dashed", color = "blue") +  # 添加x軸的平均線
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均最近來店次數") + xlab("人均利潤")
+
+# 根據此圖，a44的族群的平均來店次數低於平均，故可針對此進行行銷策略規劃。
+# 根據此圖，a34的族群的平均來店次數高於平均。
+```
+
+```{r}
+A0 %>% filter(age!="a99") %>%     # 濾掉沒有年齡資料的顧客('a99')
+  group_by(age) %>% summarise(
+    Group.Size = n(),              # 族群人數
+    avg.Senior = mean(s),          # 平均第一次購買距今天數
+    avProfit = mean(raw)           # 人均利潤
+  ) %>% 
+  ggplot(aes(y=avg.Senior, x=avProfit)) +
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=age)) +
+  geom_hline(yintercept = mean(A0$s), linetype = "dashed", color = "red") +  # 添加y軸的平均線
+  geom_vline(xintercept = mean(A0$raw), linetype = "dashed", color = "blue") +  # 添加x軸的平均線
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均第一次購買距今天數") + xlab("人均利潤")
+
+# 根據此圖，a44及a34族群的平均第一次購買距今天數皆高於平均。
+```
+
+```{r}
+A0 %>% filter(age!="a99") %>%    # 濾掉沒有年齡資料的顧客('a99')
+  group_by(age) %>% summarise(
+  Group.Size = n(),              # 族群人數
+  avg.Revenue = sum(f*m)/sum(f), # 平均客單價
+  avProfit = mean(raw)           # 人均利潤
+  ) %>% 
+  ggplot(aes(y=avg.Revenue, x=avProfit)) +
+  geom_point(aes(col=age, size=Group.Size), alpha=0.5) +
+  geom_text(aes(label=age)) +
+  geom_hline(yintercept = sum(A0$f*A0$m)/sum(A0$f), linetype = "dashed", color = "red") +  # 添加y軸的平均線
+  geom_vline(xintercept = mean(A0$raw), linetype = "dashed", color = "blue") +  # 添加x軸的平均線
+  scale_size(range=c(5,25)) +
+  theme_bw() + theme(legend.position="none") +
+  ggtitle("年齡區隔特徵 (泡泡大小:族群人數)") + 
+  ylab("平均客單價") + xlab("人均利潤")
+
+# 根據此圖，a44及a34族群的平均客單價皆高於平均。
+```
+
+
+
+```{r fig.height=2, fig.width=7}
+par(mfrow=c(1,2),cex=0.7)
+table(A0$age) %>% barplot(las=2,main="Age Groups") #去tafeng購買人數最多的三個族群依序為 a39、a34、a44
+table(A0$area) %>% barplot(las=2,main="Areas")     #tafeng 應該位於南港區及汐止區交界處
+```
+
+```{r fig.height=5, fig.width=6}
+MOSA = function(formula, data) mosaic(formula, data, shade=T, 
+  margins=c(0,1,0,0), labeling_args = list(rot_labels=c(90,0,0,0)),
+  gp_labels=gpar(fontsize=9), legend_args=list(fontsize=9),
+  gp_text=gpar(fontsize=7),labeling=labeling_residuals)
+
+MOSA(~age+area, A0)
+
+# 根據此圖可發現，a44多居住於z110（信義區）及z114（內湖區），故離tafeng所在地有一定距離。
+# 根據此圖可發現，a34多居住於z221（汐止區）及其他地區，故離tafeng所在地較近，或住在其他地方特定來訪。
+```
+
+```{r}
+# 此圖為a34族群喜愛購買的前五名品類。
+a44_top5=Z0 %>% 
+  filter(age != "a99", age == "a44") %>%
+  group_by(cat) %>%
+  summarise(total_quantity = sum(qty)) %>%
+  arrange(desc(total_quantity)) %>%
+  head(5)%>%
+  mutate(cat = as.character(cat))%>%
+  ggplot(aes(x = cat, y = total_quantity)) +
+  geom_bar(stat = "identity", fill = "skyblue", alpha = 0.7) +
+  theme_minimal() +
+  ggtitle("Total Quantity for Top 5 Purchased Category (Age Group a44)") +
+  xlab("Category") +
+  ylab("Total Quantity")
+print(a44_top5)
+```
+
+```{r}
+# 此圖為a34族群喜愛購買的前五名品類。
+a34_top5=Z0 %>% 
+  filter(age != "a99", age == "a34") %>%
+  group_by(cat) %>%
+  summarise(total_quantity = sum(qty)) %>%
+  arrange(desc(total_quantity)) %>%
+  head(5)%>%
+  mutate(cat = as.character(cat))%>%
+  ggplot(aes(x = cat, y = total_quantity)) +
+  geom_bar(stat = "identity", fill = "skyblue", alpha = 0.7) +
+  theme_minimal() +
+  ggtitle("Total Quantity for Top 5 Purchased Category (Age Group a34)") +
+  xlab("Category") +
+  ylab("Total Quantity")
+print(a34_top5)
+```
+
+```{r}
+# 根據以上兩張圖可看出，品類100205、110411、120103為a44及a34族群共同喜好的產品。
+```
+
+```{r}
+Z0 %>% filter(age != "a99", age == "a34") %>%
+  #filter(cat==110411) %>% 
+  mutate(wday = format(date, "%u")) %>% 
+  group_by(wday) %>%
+  summarise(total_quantity = sum(qty)) %>%
+  arrange(desc(total_quantity)) %>%
+  ggplot(aes(x = wday, y = total_quantity)) +
+  geom_bar(stat = "identity", fill = "skyblue", alpha = 0.7) +
+  theme_minimal() +
+  ggtitle("週購買數量 (Age Group a34)") +
+  xlab("Category") +
+  ylab("Total Quantity")
+```
