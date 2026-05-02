@@ -38,23 +38,20 @@ Developed a customer analytics framework combining segmentation, predictive mode
 This section highlights key analytical outputs used to support business decision-making.
 
 ### Customer Segmentation Insight
-
 ![Customer Segmentation Insight](customer_segmentation_insight.png)
 
 Key customer segments were identified based on profitability and behavioral differences, providing the foundation for targeted marketing strategy.
 
----
+<br>
 
 ### Purchase Prediction Model
-
 ![Purchase Prediction Model](purchase_prediction_model.png)
 
 Purchase probability and expected spending were modeled using RFM variables: Recency, Frequency, and Monetary value.
 
----
+<br>
 
 ### Marketing ROI Optimization
-
 ![Marketing ROI Optimization](marketing_roi_optimization.png)
 
 Marketing strategies were evaluated through ROI simulation to estimate expected profit uplift, optimal targeting size, and campaign efficiency.
